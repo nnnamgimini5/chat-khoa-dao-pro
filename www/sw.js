@@ -1,5 +1,5 @@
 /* Service worker: lưu sẵn app để mở nhanh và chạy khi mất mạng. Đổi VERSION mỗi lần phát hành. */
-var VERSION = 'chatkhoa-1.1.0';
+var VERSION = 'chatkhoa-1.1.1';
 var CORE = [
   './app.js',
   './config.js',

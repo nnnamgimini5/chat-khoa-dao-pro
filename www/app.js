@@ -416,7 +416,10 @@
     function nextStep() {
       codes.push(code);
       if (stepI < opt.steps.length - 1) { stepI++; drawStep(); }
-      else { cleanup(); opt.onDone(codes); }
+      else {
+        cleanup();
+        try { opt.onDone(codes); } catch (e) { console.error(e); msg.textContent = 'Có lỗi, anh thử lại'; stepI = 0; codes = []; drawStep(); document.addEventListener('keydown', onKey); }
+      }
     }
     function press(k) {
       if (busyNow || Sec.lockoutLeft() > 0 || code.length >= 4) return;
@@ -434,6 +437,10 @@
         if (navigator.vibrate) navigator.vibrate(120);
         msg.textContent = st.failText || (r && r.locked ? '' : 'Sai mã' + (r ? ', còn ' + r.left + ' lần thử' : ', anh thử lại'));
         lockTick();
+      }).catch(function (e) {
+        busyNow = false; code = ''; drawDots();
+        msg.textContent = 'Lỗi kiểm tra mã: ' + ((e && e.message) || 'không rõ') + '. Anh thử lại';
+        console.error(e);
       });
     }
     function doBio() {
@@ -466,7 +473,16 @@
         { title: 'Tạo PIN chung', sub: '4 số, dùng để mở các chat bị khóa' },
         { title: 'Nhập lại PIN', sub: 'Xác nhận PIN vừa tạo', counts: false, failText: 'Hai lần nhập không khớp', check: function (c, codes) { return c === codes[0]; } }
       ],
-      onDone: function (codes) { Sec.setPin(codes[0]).then(function () { toast('Đã tạo PIN chung'); done(); }); }
+      onDone: function (codes) {
+        Sec.setPin(codes[0]).then(function () {
+          if (!Sec.hasPin()) throw new Error('Trình duyệt không cho lưu dữ liệu (đang ở chế độ ẩn danh/bí mật?)');
+          toast('Đã tạo PIN chung'); done();
+        }).catch(function (e) {
+          console.error(e);
+          toast('Không lưu được PIN: ' + ((e && e.message) || 'lỗi trình duyệt'), true);
+          S.screen = null; setupPin(done, cancel);
+        });
+      }
     });
   }
 
