@@ -28,7 +28,8 @@ android {
         release {
             minifyEnabled false
             def ks = System.getenv('CK_KEYSTORE')
-            signingConfig (ks && file(ks).exists()) ? signingConfigs.release : signingConfigs.debug
+            def useRelease = ks != null && file(ks).exists()
+            signingConfig = useRelease ? signingConfigs.release : signingConfigs.debug
         }
     }
     compileOptions {
