@@ -75,7 +75,12 @@ jobs:
           CK_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           CK_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           CK_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: |
+          for i in 1 2 3; do
+            gradle assembleRelease --no-daemon && exit 0
+            echo "Lần $i lỗi, thử lại sau $((i*30)) giây…"; sleep $((i*30))
+          done
+          exit 1
 
       - name: Đặt tên file
         run: |
