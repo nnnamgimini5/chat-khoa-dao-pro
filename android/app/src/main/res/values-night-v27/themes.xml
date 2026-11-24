@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.ChatKhoa" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#17378F</item>
+        <item name="colorPrimaryDark">#17378F</item>
+        <item name="colorAccent">#4C7DFF</item>
+        <item name="android:statusBarColor">#17378F</item>
+        <item name="android:navigationBarColor">#172033</item>
+        <item name="android:windowBackground">#0E1422</item>
+    </style>
+</resources>

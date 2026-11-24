@@ -1,0 +1,55 @@
+plugins { id 'com.android.application' }
+
+def vf = rootProject.file('../www/version.json')
+def vjson = new groovy.json.JsonSlurper().parse(vf)
+
+android {
+    namespace 'vn.daopro.chatkhoa'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'vn.daopro.chatkhoa'
+        minSdk 24
+        targetSdk 34
+        versionCode vjson.versionCode as int
+        versionName vjson.version as String
+    }
+    signingConfigs {
+        release {
+            def ks = System.getenv('CK_KEYSTORE')
+            if (ks && file(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv('CK_STORE_PASSWORD')
+                keyAlias System.getenv('CK_KEY_ALIAS')
+                keyPassword System.getenv('CK_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            def ks = System.getenv('CK_KEYSTORE')
+            signingConfig (ks && file(ks).exists()) ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets {
+        main { assets.srcDirs = ['build/generated/webassets'] }
+    }
+}
+
+/* Chép app web ../www vào assets/www trước khi đóng gói */
+tasks.register('copyWeb', Copy) {
+    from(rootProject.file('../www')) { exclude 'sw.js' }
+    into layout.buildDirectory.dir('generated/webassets/www')
+}
+preBuild.dependsOn copyWeb
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.biometric:biometric:1.1.0'
+    implementation 'androidx.core:core:1.13.1'
+}

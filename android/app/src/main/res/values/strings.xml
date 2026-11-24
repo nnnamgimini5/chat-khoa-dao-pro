@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Chat Khóa</string>
+    <string name="bio_title">Mở Chat Khóa</string>
+    <string name="bio_sub">Dùng vân tay để mở cuộc trò chuyện</string>
+    <string name="bio_cancel">Dùng PIN</string>
+    <string name="notif_channel">Tin nhắn mới</string>
+</resources>

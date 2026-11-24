@@ -1,0 +1,40 @@
+rules_version = '2';
+// Luật bảo mật Firestore cho Chat Khóa Đạo Pro.
+// Dán toàn bộ file này vào Firebase console > Firestore Database > Rules > Publish.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+
+    // Hồ sơ người dùng: ai đăng nhập cũng đọc được (để tìm bạn bằng email/QR), chỉ chủ tài khoản sửa.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40;
+      match /contacts/{cid} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Cuộc trò chuyện: chỉ thành viên đọc và cập nhật.
+    match /chats/{chatId} {
+      allow read: if signedIn() && (resource == null || request.auth.uid in resource.data.members);
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.members.size() <= 200;
+      allow update: if signedIn() && request.auth.uid in resource.data.members
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+
+      match /messages/{mid} {
+        function member() {
+          return signedIn() && request.auth.uid in get(/databases/$(db)/documents/chats/$(chatId)).data.members;
+        }
+        allow read: if member();
+        allow create: if member() && request.resource.data.from == request.auth.uid
+          && (!('text' in request.resource.data) || request.resource.data.text.size() <= 4000);
+        allow delete: if signedIn() && resource.data.from == request.auth.uid;
+      }
+    }
+  }
+}

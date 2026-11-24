@@ -1,0 +1,115 @@
+name: Build APK và bản web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đọc phiên bản
+        id: ver
+        run: echo "version=$(python3 -c "import json;print(json.load(open('www/version.json'))['version'])")" >> "$GITHUB_OUTPUT"
+
+      - name: Điền địa chỉ web và link APK
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"; REPO="${GITHUB_REPOSITORY#*/}"
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          APP_URL="https://${OWNER_LC}.github.io/${REPO}/"
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/ChatKhoa.apk"
+          sed -i "s#APP_URL: ''#APP_URL: '${APP_URL}'#" www/config.js
+          python3 - "$APK_URL" <<'PY'
+          import json, sys
+          p = 'www/version.json'; v = json.load(open(p)); v['apkUrl'] = sys.argv[1]
+          json.dump(v, open(p, 'w'), ensure_ascii=False, indent=2)
+          PY
+          grep APP_URL www/config.js
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Chuẩn bị chữ ký APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/chatkhoa.jks"
+            echo "CK_KEYSTORE=$RUNNER_TEMP/chatkhoa.jks" >> "$GITHUB_ENV"
+            echo "Dùng khóa ký riêng của anh."
+          else
+            echo "::warning::Chưa có secret KEYSTORE_BASE64: APK ký bằng khóa debug, bản sau sẽ không cài đè được."
+          fi
+
+      - name: Build APK
+        working-directory: android
+        env:
+          CK_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          CK_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          CK_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Đặt tên file
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk ChatKhoa.apk
+          cp ChatKhoa.apk "ChatKhoa-v${{ steps.ver.outputs.version }}.apk"
+          ls -la *.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChatKhoa-v${{ steps.ver.outputs.version }}
+          path: ChatKhoa-v${{ steps.ver.outputs.version }}.apk
+
+      - name: Phát hành bản cài đặt
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Chat Khóa v${{ steps.ver.outputs.version }}
+          body_path: www/version.json
+          make_latest: true
+          files: |
+            ChatKhoa.apk
+            ChatKhoa-v${{ steps.ver.outputs.version }}.apk
+
+      - name: Gói bản web
+        run: cp -r www site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  web:
+    needs: apk
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deploy
+        uses: actions/deploy-pages@v4
