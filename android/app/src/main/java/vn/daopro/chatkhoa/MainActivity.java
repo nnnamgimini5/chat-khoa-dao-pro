@@ -160,7 +160,22 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(HOME);
+        else web.loadUrl(HOME + inviteFragment(getIntent()));
+    }
+
+    /** Lấy phần #moi=... hoặc #nhom=... từ link mời (chỉ nhận ký tự an toàn) */
+    private static String inviteFragment(Intent intent) {
+        if (intent == null || intent.getData() == null) return "";
+        String f = intent.getData().getFragment();
+        if (f == null || !f.matches("(moi|nhom)=[A-Za-z0-9.]{10,90}")) return "";
+        return "#" + f;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String frag = inviteFragment(intent);
+        if (!frag.isEmpty()) evalJs("window.DaoApp && DaoApp.handleInvite('" + frag + "')");
     }
 
     @Override

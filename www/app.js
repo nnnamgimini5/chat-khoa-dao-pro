@@ -182,6 +182,7 @@
   });
   /* Nút Back của Android (gọi từ app gốc). Trả về true nếu app đã xử lý. */
   window.DaoApp = {
+    handleInvite: function (hash) { if (captureInvite(hash)) { if (S.screen === 'main') processInvite(); else if (S.ready) route(); } },
     onBack: function () {
       if (sheetOpen()) { closeSheet(); return true; }
       if (depth > 0) { history.back(); return true; }
@@ -251,8 +252,75 @@
   function route() {
     if (!LS.lsGet('dao_onboarded', false)) return showWelcome();
     if (!S.me) return showAuth();
-    if (!Sec.hasPin()) return S.screen === 'setpin' ? null : setupPin(function () { goMain(); });
+    if (!Sec.hasPin()) return S.screen === 'setpin' ? null : setupPin(function () { goMain(); setTimeout(processInvite, 300); });
     if (!S.screen || S.screen === 'auth' || S.screen === 'welcome' || S.screen === 'setpin') goMain();
+    setTimeout(processInvite, 300);
+  }
+
+  /* ---------- Link mời ---------- */
+  function readInvite(hash) {
+    var m = /moi=([A-Za-z0-9]{10,40})/.exec(hash || '');
+    if (m) return { type: 'user', uid: m[1] };
+    m = /nhom=([A-Za-z0-9]{10,40})\.([A-Za-z0-9]{8,40})/.exec(hash || '');
+    if (m) return { type: 'group', id: m[1], code: m[2] };
+    return null;
+  }
+  function captureInvite(hash) {
+    var inv = readInvite(hash);
+    if (!inv) return false;
+    LS.lsSet('dao_invite', inv);
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* bỏ qua */ }
+    return true;
+  }
+  function processInvite() {
+    var inv = LS.lsGet('dao_invite', null);
+    if (!inv || !S.me || S.screen !== 'main') return;
+    LS.lsSet('dao_invite', null);
+    if (S.store.mode !== 'cloud') { toast('Link mời cần app kết nối máy chủ', true); return; }
+    if (inv.type === 'user') {
+      if (inv.uid === S.me.uid) { toast('Đây là link mời của chính anh. Gửi link này cho người khác nhé'); return; }
+      S.store.addContactByUid(inv.uid).then(function (u) {
+        return S.store.openDirect(u).then(function (cid) { toast('Đã kết nối với ' + u.name); waitChat(cid, function () { openChat(cid); }); });
+      }).catch(function (e) { toast(e && e.message === 'notfound' ? 'Link mời không hợp lệ' : errText(e), true); });
+    } else {
+      S.store.joinGroup(inv.id, inv.code).then(function (cid) { toast('Đã vào nhóm'); waitChat(cid, function () { openChat(cid); }); })
+        .catch(function () { toast('Link mời nhóm không đúng hoặc đã bị đổi', true); });
+    }
+  }
+  function myInviteUrl() { var u = appUrl(); return u && S.me ? u + '#moi=' + S.me.uid : ''; }
+  function sendLink(url, text) {
+    if (NATIVE && NATIVE.share) { NATIVE.share(text + ' ' + url); return; }
+    if (navigator.share) navigator.share({ title: 'Chat Khóa', text: text, url: url }).catch(function () { /* hủy */ });
+    else copyText(url);
+  }
+  function linkBox(url, text, qrLabel) {
+    var qr = window.qrcode(0, 'M'); qr.addData(url); qr.make();
+    var inp = h('input', { type: 'text', value: url, readonly: true, 'aria-label': 'Link mời', 'data-nofocus': true, onFocus: function () { inp.select(); } });
+    return [
+      h('div', { class: 'input' }, icon('share', 18), inp),
+      h('div', { style: 'display:flex;gap:10px' },
+        h('button', { class: 'btn sec', style: 'flex:1', onClick: function () { copyText(url); } }, icon('copy', 18), 'Sao chép'),
+        h('button', { class: 'btn pri', style: 'flex:1', onClick: function () { sendLink(url, text); } }, icon('send', 18), 'Gửi link')),
+      h('div', { class: 'qr' }, h('img', { src: qr.createDataURL(6, 2), alt: qrLabel })),
+      h('p', { class: 'desc', style: 'text-align:center', text: 'Người nhận quét mã bằng camera điện thoại cũng mở được link.' })
+    ];
+  }
+  function inviteSheet() {
+    if (S.store.mode !== 'cloud') { needCloud('Mời người chat'); return; }
+    var url = myInviteUrl();
+    if (!url) { toast('Chưa có địa chỉ web của app', true); return; }
+    openSheet('Mời người chat với anh', 'userPlus', [
+      h('p', { class: 'desc', text: 'Gửi link này qua Zalo, Messenger hoặc tin nhắn. Người nhận bấm vào, đăng ký bằng email là vào thẳng cuộc chat với anh.' })
+    ].concat(linkBox(url, S.me.name + ' mời bạn chat trên Chat Khóa:', 'Mã QR mời chat với ' + S.me.name)));
+  }
+  function groupInviteSheet(c) {
+    if (S.store.mode !== 'cloud') { needCloud('Link mời vào nhóm'); return; }
+    S.store.groupInvite(c).then(function (code) {
+      var url = appUrl() + '#nhom=' + c.id + '.' + code;
+      openSheet('Mời vào “' + chatTitle(c) + '”', 'users', [
+        h('p', { class: 'desc', text: 'Ai có link này đều vào được nhóm sau khi đăng ký. Chỉ gửi cho người trong dự án.' })
+      ].concat(linkBox(url, 'Mời bạn vào nhóm “' + chatTitle(c) + '” trên Chat Khóa:', 'Mã QR vào nhóm')));
+    }).catch(function (e) { toast(errText(e), true); });
   }
   function startData() {
     S.chats = null; S.contacts = null; S.chatsErr = null;
@@ -333,7 +401,7 @@
   function showAuth() {
     S.screen = 'auth';
     var cloud = S.store.mode === 'cloud';
-    var mode = 'login';
+    var mode = LS.lsGet('dao_invite', null) ? 'signup' : 'login';
     var err = h('div', { class: 'err-text', role: 'alert' });
     var name = h('input', { type: 'text', autocomplete: 'name', placeholder: 'VD: Đạo – QS', maxlength: '40', id: 'f-name' });
     var email = h('input', { type: 'email', autocomplete: 'email', inputmode: 'email', placeholder: 'ten@congty.vn', id: 'f-email' });
@@ -374,6 +442,8 @@
         h('div', { class: 'brand', style: 'width:64px;height:64px;border-radius:20px;background:#1550E8;color:#fff' }, icon('lock', 32, 2.2)),
         h('h2', { style: 'margin:0;font-size:22px', text: cloud ? 'Đăng nhập Chat Khóa' : 'Dùng thử Chat Khóa' }),
         h('p', { style: 'margin:0;color:var(--tx-2);font-size:14px;line-height:1.5', text: cloud ? 'Tài khoản dùng chung trên mọi máy của anh.' : 'Chế độ thử: dữ liệu mẫu, chỉ lưu trên máy này.' })),
+      LS.lsGet('dao_invite', null) ? h('div', { class: 'card note ok', style: 'margin:0' }, h('div', { class: 'ic' }, icon('userPlus', 18)),
+        h('span', { text: LS.lsGet('dao_invite', {}).type === 'group' ? 'Bạn được mời vào nhóm chat. Đăng ký hoặc đăng nhập để vào nhóm.' : 'Bạn được mời chat. Đăng ký hoặc đăng nhập là vào thẳng cuộc trò chuyện.' })) : null,
       cloud ? null : h('div', { class: 'card note', style: 'margin:0' }, h('div', { class: 'ic' }, icon('server', 18)),
         h('span', null, 'Muốn nhắn với người khác? ', h('button', { class: 'btn ghost', style: 'height:auto;padding:0', text: 'Kết nối máy chủ', onClick: serverSheet }))),
       form));
@@ -591,8 +661,9 @@
       list.appendChild(h('div', { class: 'card empty' },
         h('div', { class: 'art' }, icon(emp ? 'chat' : 'search', 34)),
         h('b', { text: emp ? 'Chưa có cuộc trò chuyện' : 'Không tìm thấy' }),
-        h('p', { text: emp ? 'Thêm người vào danh bạ rồi bấm dấu + để bắt đầu chat hoặc tạo nhóm dự án.' : 'Thử từ khóa khác hoặc đổi bộ lọc.' }),
-        emp ? h('button', { class: 'btn pri', onClick: newSheet }, icon('plus', 18), 'Tạo chat mới') : null));
+        h('p', { text: emp ? 'Gửi link mời qua Zalo cho đồng nghiệp. Họ bấm vào là chat được với anh.' : 'Thử từ khóa khác hoặc đổi bộ lọc.' }),
+        emp ? h('button', { class: 'btn pri', onClick: inviteSheet }, icon('userPlus', 18), 'Mời người chat với anh') : null,
+        emp ? h('button', { class: 'btn sec', onClick: newSheet }, icon('plus', 18), 'Tạo nhóm / chat mới') : null));
       return;
     }
     shown.forEach(function (c) { list.appendChild(chatRow(c)); });
@@ -861,6 +932,7 @@
     });
     body.push(mlist);
     if (c.isGroup) {
+      body.push(h('button', { class: 'btn pri block', onClick: function () { groupInviteSheet(c); } }, icon('share', 18), 'Gửi link mời vào nhóm'));
       body.push(h('button', { class: 'btn sec block', onClick: function () {
         pickContacts('Thêm thành viên', (c.members || []), function (users) { S.store.addMembers(id, users).then(function () { toast('Đã thêm ' + users.length + ' thành viên'); }).catch(function (e) { toast(errText(e), true); }); });
       } }, icon('userPlus', 18), 'Thêm thành viên'));
@@ -957,8 +1029,8 @@
       h('div', { class: 'top-row' }, h('div', { class: 'brand' }, icon('users', 22)), h('div', { style: 'flex:1' }, h('h1', { text: 'Danh bạ' }), h('span', { class: 'sub', text: 'Người trong các dự án của anh' })),
         ibtn('userPlus', 'Thêm người', addContactSheet)),
       h('label', { class: 'search' }, icon('search', 18), input)));
-    var actions = h('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 12px 0' },
-      [['mail', 't-b', 'Thêm email', addContactSheet], ['qr', 't-g', 'Mã QR của tôi', myQrSheet], ['scan', 't-p', 'Quét mã QR', scanSheet]].map(function (a) {
+    var actions = h('div', { style: 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:12px 12px 0' },
+      [['share', 't-b', 'Gửi link mời', inviteSheet], ['mail', 't-o', 'Thêm email', addContactSheet], ['qr', 't-g', 'Mã QR của tôi', myQrSheet], ['scan', 't-p', 'Quét mã QR', scanSheet]].map(function (a) {
         return h('button', { class: 'card', style: 'display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--tx)', onClick: a[3] },
           h('span', { class: 'ic ' + a[1], style: 'width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center' }, icon(a[0], 20)), a[2]);
       }));
@@ -1018,7 +1090,7 @@
   }
   function myQrSheet() {
     if (S.store.mode !== 'cloud') { needCloud('Mã QR của tôi'); return; }
-    var qr = window.qrcode(0, 'M'); qr.addData('daochat:' + S.me.uid); qr.make();
+    var qr = window.qrcode(0, 'M'); qr.addData(myInviteUrl() || ('daochat:' + S.me.uid)); qr.make();
     openSheet('Mã QR của tôi', 'qr', [
       h('p', { class: 'desc', text: 'Đưa mã này cho đồng nghiệp quét để thêm anh vào danh bạ.' }),
       h('div', { class: 'qr' }, h('img', { src: qr.createDataURL(8, 2), alt: 'Mã QR kết bạn của ' + S.me.name })),
@@ -1033,6 +1105,8 @@
     function end() { stop = true; if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); }
     function found(text) {
       end(); closeSheet();
+      var inv = readInvite(text);
+      if (inv) { LS.lsSet('dao_invite', inv); processInvite(); return; }
       var m = /^daochat:([A-Za-z0-9]{10,40})$/.exec(text || '');
       if (!m) { toast('Mã QR không phải của Chat Khóa', true); return; }
       S.store.addContactByUid(m[1]).then(function (u) { toast('Đã thêm ' + u.name); contactSheet(u); }).catch(function (e) { toast(errText(e), true); });
@@ -1102,7 +1176,8 @@
       h('div', { class: 'card group' },
         S.installEvt ? item('download', 't-g', 'Cài lên màn hình chính', 'Dùng như app, mở nhanh, chạy cả khi mất mạng', null, installPwa) : null,
         item('refresh', 't-g', 'Kiểm tra cập nhật', 'Phiên bản ' + CFG.VERSION + (NATIVE ? ' · Android' : ' · Web'), null, checkUpdate),
-        item('share', 't-b', 'Chia sẻ app', 'Gửi link cài đặt cho đồng nghiệp', null, shareApp),
+        cloud ? item('userPlus', 't-b', 'Mời người chat với anh', 'Gửi link qua Zalo, bấm vào là chat được', null, inviteSheet) : null,
+        item('share', 't-b', 'Chia sẻ app', 'Gửi link cài đặt app', null, shareApp),
         item('book', 't-b', 'Hướng dẫn sử dụng', 'Khóa chat, tạo nhóm, gửi file', null, helpSheet),
         item('info', 't-b', 'Giới thiệu & quyền riêng tư', 'Dữ liệu lưu ở đâu, giới hạn bảo mật', null, aboutSheet)),
       h('div', { class: 'sec-title' }, icon('user', 14), 'TÀI KHOẢN'),
@@ -1281,6 +1356,7 @@
     }).catch(function () { /* bỏ qua */ });
   }
 
+  captureInvite(location.hash);
   applyTheme();
   Sec.bioKind().then(function (k) { S.bio = k; if (!k && S.set.fp) { S.set.fp = false; saveSet(); } });
   boot();

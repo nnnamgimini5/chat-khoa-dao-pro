@@ -27,6 +27,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Mở link mời https://nnnamgimini5.github.io/chat-khoa-dao-pro/#moi=... bằng app -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="nnnamgimini5.github.io" android:pathPrefix="/chat-khoa-dao-pro" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

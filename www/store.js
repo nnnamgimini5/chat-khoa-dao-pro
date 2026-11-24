@@ -174,6 +174,8 @@
     return Promise.resolve(c);
   };
   LocalStore.prototype.addContactByUid = function () { return Promise.reject(new Error('local')); };
+  LocalStore.prototype.groupInvite = function () { return Promise.reject(new Error('local')); };
+  LocalStore.prototype.joinGroup = function () { return Promise.reject(new Error('local')); };
   LocalStore.prototype.removeContact = function (cuid) {
     this.db.contacts = this.db.contacts.filter(function (c) { return c.uid !== cuid; });
     this._save(); this._emit('contacts');
@@ -290,10 +292,22 @@
   };
   CloudStore.prototype.createGroup = function (name, users, project) {
     var me = this.me();
-    var data = { name: name, isGroup: true, project: !!project, members: [me.uid], memberNames: {}, lastText: 'Nhóm vừa được tạo' };
+    var data = { name: name, isGroup: true, project: !!project, members: [me.uid], memberNames: {}, lastText: 'Nhóm vừa được tạo', inviteCode: uid() + uid() };
     data.memberNames[me.uid] = me.name;
     users.forEach(function (u) { data.members.push(u.uid); data.memberNames[u.uid] = u.name; });
     return this._newChat(null, data);
+  };
+  /* Mã mời nhóm: tạo nếu nhóm cũ chưa có */
+  CloudStore.prototype.groupInvite = function (chat) {
+    if (chat.inviteCode) return Promise.resolve(chat.inviteCode);
+    var code = uid() + uid();
+    return this.fs.collection('chats').doc(chat.id).update({ inviteCode: code }).then(function () { return code; });
+  };
+  /* Vào nhóm bằng link mời: luật Firestore chỉ cho tự thêm mình khi mã mời đúng */
+  CloudStore.prototype.joinGroup = function (chatId, code) {
+    var me = this.me(), p = { members: this.FV.arrayUnion(me.uid), lastJoinCode: code };
+    p['memberNames.' + me.uid] = me.name;
+    return this.fs.collection('chats').doc(chatId).update(p).then(function () { return chatId; });
   };
   CloudStore.prototype.openDirect = function (user) {
     var self = this, me = this.me();

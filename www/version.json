@@ -1,6 +1,6 @@
 {
-  "version": "1.1.1",
-  "versionCode": 3,
+  "version": "1.2.0",
+  "versionCode": 4,
   "apkUrl": "",
-  "notes": "Sửa lỗi không tạo được PIN trên một số trình duyệt (Samsung Internet, trình duyệt trong app). Báo lỗi rõ ràng thay vì đứng im."
+  "notes": "Link mời: gửi link qua Zalo, người nhận bấm vào là chat được ngay với anh. Link mời vào nhóm. Mã QR chứa link mời."
 }
