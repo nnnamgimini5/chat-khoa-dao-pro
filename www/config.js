@@ -4,8 +4,8 @@
      Cũng có thể dán trong app: Cài đặt > Kết nối máy chủ, không cần build lại.
    - APP_URL: địa chỉ bản web (GitHub Pages). Dùng cho nút chia sẻ và kiểm tra cập nhật trong bản APK. */
 window.DAO_CONFIG = {
-  VERSION: '1.2.0',
-  VERSION_CODE: 4,
+  VERSION: '1.2.1',
+  VERSION_CODE: 5,
   FIREBASE: {
     apiKey: 'AIzaSyCDn86Fmzvhf-OiXxMq43Lq2pPVhwXCavk',
     authDomain: 'striking-domain-477206-d5.firebaseapp.com',

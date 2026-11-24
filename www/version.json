@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "versionCode": 4,
+  "version": "1.2.1",
+  "versionCode": 5,
   "apkUrl": "",
-  "notes": "Link mời: gửi link qua Zalo, người nhận bấm vào là chat được ngay với anh. Link mời vào nhóm. Mã QR chứa link mời."
+  "notes": "Đã có máy chủ chung: đăng ký bằng email, gửi link mời qua Zalo là nhắn tin được với nhau."
 }
